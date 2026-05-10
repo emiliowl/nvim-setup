@@ -53,6 +53,20 @@ nvm use 24
 nvm alias default 24
 ```
 
+> **Neovim doesn't source nvm's shell init**, so plugins that need `node` (Copilot, CopilotChat)
+> will fail with "could not determine node version". Fix it by adding this to
+> `~/.config/nvim/lua/config/options.lua`:
+>
+> ```lua
+> local nvm_dir = os.getenv("NVM_DIR") or (os.getenv("HOME") .. "/.nvm")
+> local node_bin = vim.fn.trim(vim.fn.system("ls -d " .. nvm_dir .. "/versions/node/*/bin 2>/dev/null | sort -V | tail -1"))
+> if node_bin ~= "" then
+>   vim.env.PATH = node_bin .. ":" .. vim.env.PATH
+> end
+> ```
+>
+> This picks the latest installed version automatically and doesn't break when you upgrade Node.
+
 #### Python — via pyenv
 
 ```bash
@@ -72,6 +86,12 @@ pip install debugpy        # required for Python DAP
 ```
 
 #### Java — via SDKMAN
+
+> **macOS:** SDKMAN requires Bash 4+. macOS ships with Bash 3.2 and the installer will
+> hard-fail. Install a modern Bash first:
+> ```bash
+> brew install bash
+> ```
 
 ```bash
 curl -s "https://get.sdkman.io" | bash
@@ -638,13 +658,23 @@ nvim
 
 lazy.nvim will clone itself, then download and install all plugins. This takes 1–3 minutes.
 
-After the initial install, Mason will be available. Install all LSP servers and tools:
+After the initial install, Mason will be available. **Wait for the Lazy UI to show "Done" before
+running `:MasonInstall`** — typing it while plugins are still loading produces "Not an editor
+command". Install all LSP servers and tools:
 
 ```
 :MasonInstall lua-language-server pyright ruff debugpy stylua shfmt vtsls js-debug-adapter jdtls java-debug-adapter java-test csharp-language-server csharpier netcoredbg fsautocomplete fantomas
 ```
 
 Or let LazyVim auto-install via `MasonAutoInstall` — just open a file of each language type and Mason will prompt.
+
+To bootstrap and install Mason tools non-interactively (useful on fresh machines):
+
+```bash
+# sync all plugins headlessly
+nvim --headless "+Lazy sync" +qa
+# then open nvim normally and run :MasonInstall
+```
 
 ---
 
