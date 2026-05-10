@@ -33,17 +33,11 @@ sudo ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim
 xcode-select --install                        # build tools: git, gcc, make
 brew install ripgrep fd fzf lazygit           # fd installs as fd, no symlink needed
 
-# Ubuntu/Debian
+# Ubuntu/Debian/Pop!_OS
 sudo apt install git gcc g++ make ripgrep fd-find fzf lazygit curl unzip
-
-# Fedora/RHEL
-sudo dnf install git gcc g++ make ripgrep fd-find fzf lazygit curl unzip
-
-# Arch
-sudo pacman -S git gcc make ripgrep fd fzf lazygit curl unzip
 ```
 
-> **Linux (Debian/Ubuntu only):** `fd` installs as `fdfind`. Symlink it: `sudo ln -sf $(which fdfind) /usr/local/bin/fd`
+> **Debian/Ubuntu:** `fd` installs as `fdfind`. Symlink it: `sudo ln -sf $(which fdfind) /usr/local/bin/fd`
 
 ### Language runtimes
 
@@ -92,8 +86,7 @@ sdk install java 25.0.3-tem   # or any LTS (21, 17) — jdtls supports all
 ```bash
 sdk install maven          # recommended — works on macOS and Linux
 brew install maven         # macOS alternative
-sudo apt install maven     # Ubuntu/Debian
-sudo dnf install maven     # Fedora
+sudo apt install maven     # Ubuntu/Debian/Pop!_OS
 ```
 
 #### .NET / C# — via Microsoft installer
@@ -102,13 +95,10 @@ sudo dnf install maven     # Fedora
 # macOS (Homebrew)
 brew install dotnet
 
-# Ubuntu 22.04+
+# Ubuntu/Debian/Pop!_OS
 wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
 sudo dpkg -i packages-microsoft-prod.deb
 sudo apt update && sudo apt install dotnet-sdk-10
-
-# Fedora/RHEL
-sudo dnf install dotnet-sdk-10
 ```
 
 Then install csharp-ls (LSP server used instead of broken OmniSharp):
