@@ -680,6 +680,26 @@ Follow the device-flow URL it prints to link your GitHub account.
 
 All items should be green or have a clear install instruction.
 
+### Java — jdtls first-run indexing delay
+
+When you open a Java file for the first time in a project, jdtls indexes the entire
+classpath. This takes **30–60 seconds**. All `<leader>j*` keybindings silently do nothing
+during this window. Wait for the `jdtls: server ready` notification in the status line
+before using any debug or refactor commands.
+
+### Java — when jdtls gets stuck
+
+If jdtls behaves strangely after a package rename, branch switch, or dependency change,
+wipe its workspace cache and restart:
+
+```
+:JdtWipeDataAndRestart
+```
+
+This deletes the project's entry under `~/.local/share/nvim/jdtls-workspaces/` and
+re-indexes from scratch. It's the first thing to try when diagnostics are wrong,
+references are missing, or DAP configs stop appearing.
+
 ---
 
 ## Key bindings (LazyVim defaults — most important)
@@ -713,6 +733,10 @@ All items should be green or have a clear install instruction.
 | `<leader>ji` | Organize imports |
 | `<leader>jev` | Extract variable |
 | `<leader>jem` | Extract method |
+
+> **`<leader>jt` and `<leader>jm` require JUnit 5 (Jupiter).** These keybindings go through
+> the `java-test` Mason bundle, which only discovers JUnit 5 tests. A project still on
+> JUnit 4 will show no tests found. Use `junit-jupiter` as your test dependency.
 
 ---
 
