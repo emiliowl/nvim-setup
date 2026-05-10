@@ -8,15 +8,18 @@ Reproduces this exact Neovim environment: **LazyVim** distribution with a matrix
 
 ### Neovim
 
-Install **v0.12+** (this setup uses v0.12.2). The recommended way on Linux is via the [official releases](https://github.com/neovim/neovim/releases):
+Install **v0.12+** (this setup uses v0.12.2).
 
 ```bash
-# Option A: AppImage (easiest, works on any distro)
+# macOS (Homebrew)
+brew install neovim
+
+# Linux — Option A: AppImage (easiest, works on any distro)
 curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.appimage
 chmod +x nvim-linux-x86_64.appimage
 sudo mv nvim-linux-x86_64.appimage /usr/local/bin/nvim
 
-# Option B: tarball
+# Linux — Option B: tarball
 curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
 tar xzf nvim-linux-x86_64.tar.gz
 sudo mv nvim-linux-x86_64 /opt/nvim
@@ -26,6 +29,10 @@ sudo ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim
 ### System dependencies
 
 ```bash
+# macOS
+xcode-select --install                        # build tools: git, gcc, make
+brew install ripgrep fd fzf lazygit           # fd installs as fd, no symlink needed
+
 # Ubuntu/Debian
 sudo apt install git gcc g++ make ripgrep fd-find fzf lazygit curl unzip
 
@@ -36,7 +43,7 @@ sudo dnf install git gcc g++ make ripgrep fd-find fzf lazygit curl unzip
 sudo pacman -S git gcc make ripgrep fd fzf lazygit curl unzip
 ```
 
-> On Debian/Ubuntu `fd` installs as `fdfind`. Symlink it: `sudo ln -sf $(which fdfind) /usr/local/bin/fd`
+> **Linux (Debian/Ubuntu only):** `fd` installs as `fdfind`. Symlink it: `sudo ln -sf $(which fdfind) /usr/local/bin/fd`
 
 ### Language runtimes
 
@@ -55,6 +62,10 @@ nvm alias default 24
 #### Python — via pyenv
 
 ```bash
+# macOS — install build dependencies first or pyenv install will fail
+brew install openssl readline sqlite3 xz zlib tcl-tk
+
+# all platforms
 curl https://pyenv.run | bash
 # add to ~/.zshrc or ~/.bashrc:
 #   export PYENV_ROOT="$HOME/.pyenv"
@@ -79,21 +90,30 @@ sdk install java 25.0.3-tem   # or any LTS (21, 17) — jdtls supports all
 `<leader>ja` and `<leader>jA` shell out to `mvn`. Install it via SDKMAN or your package manager:
 
 ```bash
-sdk install maven          # recommended — keeps it alongside the JDK
-# or:
+sdk install maven          # recommended — works on macOS and Linux
+brew install maven         # macOS alternative
 sudo apt install maven     # Ubuntu/Debian
 sudo dnf install maven     # Fedora
 ```
 
-#### .NET / C# — via Microsoft package feed
+#### .NET / C# — via Microsoft installer
 
 ```bash
+# macOS (Homebrew)
+brew install dotnet
+
 # Ubuntu 22.04+
 wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
 sudo dpkg -i packages-microsoft-prod.deb
 sudo apt update && sudo apt install dotnet-sdk-10
 
-# Install csharp-ls (LSP server used instead of broken OmniSharp)
+# Fedora/RHEL
+sudo dnf install dotnet-sdk-10
+```
+
+Then install csharp-ls (LSP server used instead of broken OmniSharp):
+
+```bash
 dotnet tool install --global csharp-ls
 ```
 
@@ -103,6 +123,10 @@ dotnet tool install --global csharp-ls
 # ~/.zshrc or ~/.bashrc
 export PATH="$HOME/.dotnet/tools:$PATH"
 ```
+
+> **Apple Silicon (M1/M2/M3) warning:** Mason's `netcoredbg` package only ships a
+> `darwin-x64` binary. It will **not** install on arm64 Macs. C# DAP debugging is
+> unavailable from Mason on Apple Silicon for now — LSP and formatting still work fine.
 
 ---
 
