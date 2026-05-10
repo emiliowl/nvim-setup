@@ -74,6 +74,17 @@ curl -s "https://get.sdkman.io" | bash
 sdk install java 25.0.3-tem   # or any LTS (21, 17) — jdtls supports all
 ```
 
+#### Maven (required for Java test keybindings)
+
+`<leader>ja` and `<leader>jA` shell out to `mvn`. Install it via SDKMAN or your package manager:
+
+```bash
+sdk install maven          # recommended — keeps it alongside the JDK
+# or:
+sudo apt install maven     # Ubuntu/Debian
+sudo dnf install maven     # Fedora
+```
+
 #### .NET / C# — via Microsoft package feed
 
 ```bash
@@ -84,7 +95,13 @@ sudo apt update && sudo apt install dotnet-sdk-10
 
 # Install csharp-ls (LSP server used instead of broken OmniSharp)
 dotnet tool install --global csharp-ls
-# Make sure ~/.dotnet/tools is on your PATH
+```
+
+`dotnet tool install --global` puts binaries in `~/.dotnet/tools`. Add it to your shell profile or `csharp-ls` won't be found:
+
+```bash
+# ~/.zshrc or ~/.bashrc
+export PATH="$HOME/.dotnet/tools:$PATH"
 ```
 
 ---
@@ -350,6 +367,10 @@ point in the test DLL so netcoredbg can launch it directly. With xUnit v2, `dotn
 spawns a separate `testhost` child process — netcoredbg attaches to the wrong process and
 all tests are skipped.
 
+> **`using Xunit;` is required.** xUnit v3 does not inject itself via `ImplicitUsings`.
+> Add it explicitly at the top of every test file or `[Fact]`, `[Theory]`, and `Assert`
+> won't resolve — even though the package is referenced.
+
 ```xml
 <ItemGroup>
   <PackageReference Include="coverlet.collector"         Version="6.0.4" />
@@ -557,6 +578,24 @@ jdtls.start_or_attach({
 > Test debugging does **not** use a launch.json entry. `<leader>jt` / `<leader>jm`
 > go through the `java-test` Mason bundle via jdtls. `<leader>jA` uses
 > `MAVEN_OPTS` + `forkCount=0` and attaches automatically.
+
+---
+
+## Setting up a solution file (.NET)
+
+`dotnet test` run from the project root requires a `.sln` that references both projects.
+Without it you must `cd` into the test folder manually every time.
+
+```bash
+cd MyProject
+dotnet new sln --name MyProject
+dotnet sln add MyProject.csproj
+dotnet sln add MyProject.Tests/MyProject.Tests.csproj
+dotnet test   # now works from the root
+```
+
+With the solution in place, the `lang-csharp.lua` DAP configs that use
+`vim.fn.getcwd()` will also resolve paths correctly when nvim is opened at the solution root.
 
 ---
 
