@@ -261,7 +261,7 @@ return {
 }
 ```
 
-### `lang-csharp.lua` — Replace broken OmniSharp with csharp-ls
+### `lang-csharp.lua` — Replace broken OmniSharp with csharp-ls + DAP
 
 ```lua
 -- OmniSharp has been broken since mid-2025; csharp-ls is the replacement.
@@ -276,8 +276,287 @@ return {
       },
     },
   },
+  {
+    "mfussenegger/nvim-dap",
+    optional = true,
+    config = function()
+      local dap = require("dap")
+      dap.adapters.coreclr = {
+        type = "executable",
+        command = vim.fn.stdpath("data") .. "/mason/bin/netcoredbg",
+        args = { "--interpreter=vscode" },
+      }
+      dap.configurations.cs = {
+        {
+          type = "coreclr",
+          name = "Launch (netcoredbg)",
+          request = "launch",
+          program = function()
+            local csproj = vim.fn.glob(vim.fn.getcwd() .. "/*.csproj")
+            if csproj ~= "" then
+              local proj = vim.fn.fnamemodify(csproj, ":t:r")
+              local tf = "net10.0"
+              local f = io.open(csproj, "r")
+              if f then
+                local content = f:read("*a")
+                f:close()
+                tf = content:match("<TargetFramework>(.-)</TargetFramework>") or tf
+              end
+              local dll = vim.fn.getcwd() .. "/bin/Debug/" .. tf .. "/" .. proj .. ".dll"
+              if vim.fn.filereadable(dll) == 1 then return dll end
+            end
+            return vim.fn.input("Path to .dll: ", vim.fn.getcwd() .. "/bin/Debug/", "file")
+          end,
+          cwd = "${workspaceFolder}",
+          stopAtEntry = false,
+        },
+        {
+          type = "coreclr",
+          name = "Debug Tests (netcoredbg)",
+          request = "launch",
+          -- xUnit v3 test DLLs are self-executable — launch directly,
+          -- no vstest child process that the debugger can't follow.
+          program = function()
+            local dlls = vim.fn.glob(vim.fn.getcwd() .. "/**/*.Tests/bin/Debug/*/*.Tests.dll", false, true)
+            if #dlls > 0 then return dlls[1] end
+            return vim.fn.input("Path to .Tests.dll: ", vim.fn.getcwd() .. "/", "file")
+          end,
+          args = {},
+          cwd = function()
+            local dirs = vim.fn.glob(vim.fn.getcwd() .. "/**/*.Tests", false, true)
+            return #dirs > 0 and dirs[1] or "${workspaceFolder}"
+          end,
+          stopAtEntry = false,
+        },
+        {
+          type = "coreclr",
+          name = "Attach (netcoredbg)",
+          request = "attach",
+          processId = require("dap.utils").pick_process,
+        },
+      }
+    end,
+    keys = {
+      { "<leader>dC", "<cmd>PBClearAllBreakpoints<cr>", desc = "Clear All Breakpoints" },
+    },
+  },
 }
 ```
+
+#### Test project — `hello.Tests/hello.Tests.csproj`
+
+Use **xUnit v3** (`xunit.v3`), not `xunit` v2. xUnit v3 generates a proper `Main` entry
+point in the test DLL so netcoredbg can launch it directly. With xUnit v2, `dotnet test`
+spawns a separate `testhost` child process — netcoredbg attaches to the wrong process and
+all tests are skipped.
+
+```xml
+<ItemGroup>
+  <PackageReference Include="coverlet.collector"         Version="6.0.4" />
+  <PackageReference Include="Microsoft.NET.Test.Sdk"     Version="17.14.1" />
+  <PackageReference Include="xunit.v3"                   Version="3.2.2" />
+  <PackageReference Include="xunit.runner.visualstudio"  Version="3.1.5" />
+</ItemGroup>
+```
+
+The main project must also exclude the test subdirectory from its own glob and expose
+internals:
+
+```xml
+<!-- hello.csproj -->
+<ItemGroup>
+  <Compile Remove="hello.Tests/**" />
+</ItemGroup>
+<ItemGroup>
+  <InternalsVisibleTo Include="hello.Tests" />
+</ItemGroup>
+```
+
+#### Project — `.vscode/launch.json`
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch hello.dll (netcoredbg)",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/Debug/net10.0/hello.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Debug Tests hello.Tests (netcoredbg)",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/hello.Tests/bin/Debug/net10.0/hello.Tests.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/hello.Tests",
+      "stopAtEntry": false,
+      "console": "integratedTerminal"
+    }
+  ]
+}
+```
+
+### `lang-java.lua` — nvim-jdtls plugin spec
+
+```lua
+return {
+  {
+    "mfussenegger/nvim-jdtls",
+    ft = "java",
+    -- actual config lives in ftplugin/java.lua, which nvim-jdtls recommends
+    -- so that start_or_attach runs per-buffer with the correct root_dir
+    dependencies = { "mfussenegger/nvim-dap" },
+  },
+}
+```
+
+### `ftplugin/java.lua` — per-buffer jdtls config
+
+Create at `~/.config/nvim/ftplugin/java.lua`. nvim-jdtls's recommended pattern: this file
+runs for every Java buffer so `start_or_attach` always gets the correct `root_dir`.
+
+```lua
+local jdtls = require("jdtls")
+local mason_packages = vim.fn.stdpath("data") .. "/mason/packages"
+
+local root_dir = jdtls.setup.find_root({ ".git", "mvnw", "gradlew", "pom.xml", "build.gradle" })
+if not root_dir then return end
+
+local project_name = vim.fn.fnamemodify(root_dir, ":t")
+local workspace_dir = vim.fn.stdpath("data") .. "/jdtls-workspaces/" .. project_name
+
+local java_home = vim.fn.getenv("JAVA_HOME")
+if java_home == vim.NIL or java_home == "" then
+  java_home = vim.fn.expand("~/.sdkman/candidates/java/current")
+end
+
+local bundles = {
+  vim.fn.glob(mason_packages .. "/java-debug-adapter/extension/server/com.microsoft.java.debug.plugin-*.jar", true),
+}
+vim.list_extend(bundles, vim.split(
+  vim.fn.glob(mason_packages .. "/java-test/extension/server/*.jar", true),
+  "\n", { plain = true, trimempty = true }
+))
+
+-- Register the java DAP adapter immediately (before on_attach) so keybindings
+-- that trigger dap.run() work as soon as the file opens.
+jdtls.setup_dap({ hotcodereplace = "auto" })
+
+local map = function(keys, func, desc)
+  vim.keymap.set("n", keys, func, { buffer = true, desc = desc })
+end
+
+map("<leader>ji",  function() jdtls.organize_imports() end,    "Java: Organize Imports")
+map("<leader>jt",  function() jdtls.test_class() end,          "Java: Test Class")
+map("<leader>jm",  function() jdtls.test_nearest_method() end, "Java: Test Nearest Method")
+map("<leader>jev", function() jdtls.extract_variable() end,    "Java: Extract Variable")
+map("<leader>jem", function() jdtls.extract_method() end,      "Java: Extract Method")
+
+-- Run all tests (no debugger)
+map("<leader>ja", function()
+  Snacks.terminal("cd " .. root_dir .. " && mvn test", { cwd = root_dir })
+end, "Java: Run All Tests")
+
+-- Debug all tests:
+--   forkCount=0  → tests run inside Maven's own JVM (no surefire fork)
+--   MAVEN_OPTS   → JDWP agent on that same JVM
+--   on_stdout    → auto-attach the moment Maven prints "Listening for transport"
+--
+-- Why not -Dmaven.surefire.debug?  That flag forks a child JVM; surefire waits
+-- for the booter handshake while the child is frozen by JDWP → timeout → exit 2.
+map("<leader>jA", function()
+  local dap = require("dap")
+  local attached = false
+  local output = ""
+
+  vim.cmd("botright split | resize 12")
+  local term_buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(0, term_buf)
+
+  local jdwp = "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=localhost:5005"
+  local cmd = "cd " .. root_dir
+    .. " && MAVEN_OPTS=" .. vim.fn.shellescape(jdwp)
+    .. " mvn test -DforkCount=0"
+
+  vim.fn.termopen(cmd, {
+    on_stdout = function(_, data)
+      if attached then return end
+      output = output .. table.concat(data, "")
+      if output:match("Listening for transport") then
+        attached = true
+        vim.schedule(function()
+          jdtls.setup_dap({ hotcodereplace = "auto" })
+          dap.run({
+            type     = "java",
+            request  = "attach",
+            name     = "Debug All Tests",
+            hostName = "localhost",
+            port     = 5005,
+          })
+        end)
+      end
+    end,
+  })
+  vim.cmd("wincmd p")
+end, "Java: Debug All Tests")
+
+-- Debug main program: setup_dap_main_class_configs is async; on_ready fires once
+-- jdtls has scanned the classpath, then dap.continue() shows the picker.
+map("<leader>jd", function()
+  jdtls.dap.setup_dap_main_class_configs({
+    on_ready = function() require("dap").continue() end,
+  })
+end, "Java: Debug Program")
+
+jdtls.start_or_attach({
+  cmd = {
+    vim.fn.stdpath("data") .. "/mason/bin/jdtls",
+    "--jvm-arg=-Xmx1g",
+    "-data", workspace_dir,
+  },
+  root_dir = root_dir,
+  settings = {
+    java = {
+      configuration = {
+        runtimes = {
+          { name = "JavaSE-25", path = java_home },
+        },
+      },
+      format     = { enabled = true },
+      saveActions = { organizeImports = true },
+    },
+  },
+  init_options = { bundles = bundles },
+  on_attach = function() end,
+})
+```
+
+#### Project — `.vscode/launch.json`
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Launch Greeter",
+      "request": "launch",
+      "mainClass": "com.fit.hello.Greeter",
+      "projectName": "hello"
+    }
+  ]
+}
+```
+
+> Test debugging does **not** use a launch.json entry. `<leader>jt` / `<leader>jm`
+> go through the `java-test` Mason bundle via jdtls. `<leader>jA` uses
+> `MAVEN_OPTS` + `forkCount=0` and attaches automatically.
 
 ---
 
@@ -309,7 +588,7 @@ lazy.nvim will clone itself, then download and install all plugins. This takes 1
 After the initial install, Mason will be available. Install all LSP servers and tools:
 
 ```
-:MasonInstall lua-language-server pyright ruff debugpy stylua shfmt vtsls js-debug-adapter jdtls csharp-language-server csharpier netcoredbg fsautocomplete fantomas
+:MasonInstall lua-language-server pyright ruff debugpy stylua shfmt vtsls js-debug-adapter jdtls java-debug-adapter java-test csharp-language-server csharpier netcoredbg fsautocomplete fantomas
 ```
 
 Or let LazyVim auto-install via `MasonAutoInstall` — just open a file of each language type and Mason will prompt.
@@ -341,6 +620,8 @@ Follow the device-flow URL it prints to link your GitHub account.
 | `vtsls` | TypeScript/JS LSP |
 | `js-debug-adapter` | JS/TS DAP adapter |
 | `jdtls` | Java LSP |
+| `java-debug-adapter` | Provides `com.microsoft.java.debug.plugin-*.jar` for DAP |
+| `java-test` | JUnit runner JARs for in-editor test execution |
 | `csharp-language-server` | C# LSP (csharp-ls) |
 | `csharpier` | C# formatter |
 | `netcoredbg` | .NET DAP adapter |
@@ -380,3 +661,47 @@ All items should be green or have a clear install instruction.
 | `K` | Hover docs |
 | `<leader>ca` | Code action |
 | `<leader>cr` | Rename symbol |
+
+### Java-specific keybindings (`ftplugin/java.lua`)
+
+| Key | Action |
+|---|---|
+| `<leader>jd` | Debug main program (auto-detects `main()` via jdtls) |
+| `<leader>jt` | Debug tests in current class |
+| `<leader>jm` | Debug nearest test method |
+| `<leader>ja` | Run all tests (`mvn test`) |
+| `<leader>jA` | Debug all tests (MAVEN_OPTS + forkCount=0, auto-attach) |
+| `<leader>ji` | Organize imports |
+| `<leader>jev` | Extract variable |
+| `<leader>jem` | Extract method |
+
+---
+
+## Design decisions
+
+### Why xUnit v3 for .NET tests?
+
+xUnit v2 tests are run by a vstest `testhost` child process. netcoredbg attaches to the
+parent `dotnet test` process — the wrong one — so all tests are skipped. xUnit v3 builds
+the test DLL with its own `Main`, making it directly launchable by netcoredbg.
+
+### Why `forkCount=0` + `MAVEN_OPTS` for Java debug-all-tests?
+
+`-Dmaven.surefire.debug` injects JDWP into surefire's *forked* child JVM. Surefire's
+parent then waits for the booter handshake, but the child is frozen (`suspend=y`). This
+race causes exit code 2. With `forkCount=0` the tests run inside Maven's own JVM;
+`MAVEN_OPTS` injects JDWP there, and the handshake problem disappears.
+
+### Why `jdtls.setup_dap()` at the top level of `ftplugin/java.lua`?
+
+If called only inside `on_attach`, the `java` DAP adapter isn't registered until jdtls
+finishes indexing (~10–30 s). Pressing any debug key before that produces
+"Config references missing adapter `java`". Calling it at ftplugin load time registers
+the adapter immediately; actual jdtls communication only happens when a debug session
+starts, by which time jdtls is ready.
+
+### Why the `on_ready` callback in `<leader>jd`?
+
+`setup_dap_main_class_configs` is async — it queries jdtls for classes with a `main`
+method. Calling `dap.continue()` immediately after would race against an empty config
+list. The `on_ready` callback fires only once the list is populated.
