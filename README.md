@@ -530,7 +530,7 @@ end, "Java: Debug All Tests")
 -- Debug main program: setup_dap_main_class_configs is async; on_ready fires once
 -- jdtls has scanned the classpath, then dap.continue() shows the picker.
 map("<leader>jd", function()
-  jdtls.dap.setup_dap_main_class_configs({
+  require("jdtls.dap").setup_dap_main_class_configs({
     on_ready = function() require("dap").continue() end,
   })
 end, "Java: Debug Program")
